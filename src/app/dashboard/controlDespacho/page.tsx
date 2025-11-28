@@ -208,7 +208,7 @@ export default function Page() {
     setSearchedRoute(selectedRoute);
 
     try {
-      const url = `https://villa.velsat.pe:8443/api/Datero/controlEdu/${date}/${selectedRoute}/etudvrg`;
+      const url = `https://villa.velsat.pe:8443/api/Datero/controlEdu/${date}/${selectedRoute}/etudv22`;
       const response = await fetch(url);
       if (!response.ok)
         throw new Error(`Error ${response.status}: ${response.statusText}`);
