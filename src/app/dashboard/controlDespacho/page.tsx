@@ -18,6 +18,8 @@ const headersRuta11 = [
   "Total",
 ];
 
+
+
 const headersRuta12 = [
   "Unidad",
   "Hora Inicio",
