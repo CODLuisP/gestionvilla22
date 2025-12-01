@@ -11,8 +11,8 @@ const headersRuta11 = [
   "Hora Registro",
   "PAMPAS",
   "CT",
-  "PARAISO",
-  "LOZA",
+  "PARAISO IDA",
+  "LOZA IDA",
   "MANANTIAL",
   "Conductor",
   "Total",
@@ -22,8 +22,8 @@ const headersRuta12 = [
   "Unidad",
   "Hora Inicio",
   "Hora Registro",
-  "LOZA",
-  "PARAISO",
+  "LOZA VUELTA",
+  "PARAISO VUELTA",
   "MAMARA",
   "ATAUCUSI",
   "SAN JOSE II",
@@ -31,11 +31,11 @@ const headersRuta12 = [
   "Total",
 ];
 
-const controlesRuta11 = ["PAMPAS", "CT", "PARAISO", "LOZA", "MANANTIAL"];
+const controlesRuta11 = ["PAMPAS", "CT", "PARAISO IDA", "LOZA IDA", "MANANTIAL"];
 
 const controlesRuta12 = [
-  "LOZA",
-  "PARAISO",
+  "LOZA VUELTA",
+  "PARAISO VUELTA",
   "MAMARA",
   "ATAUCUSI",
   "SAN JOSE II",
