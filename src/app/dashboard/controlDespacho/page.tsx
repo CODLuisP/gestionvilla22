@@ -87,8 +87,7 @@ export default function Page() {
   const [searchedRoute, setSearchedRoute] = useState("11");
 
   const currentHeaders = searchedRoute === "11" ? headersRuta11 : headersRuta12;
-  const currentControles =
-    searchedRoute === "11" ? controlesRuta11 : controlesRuta12;
+  
 
   // Función para verificar si una fila tiene al menos una hora en los controles
   const hasControlTimes = (row: (string | string[])[]) => {
