@@ -31,7 +31,13 @@ const headersRuta12 = [
   "Total",
 ];
 
-const controlesRuta11 = ["PAMPAS", "CT", "PARAISO IDA", "LOZA IDA", "MANANTIAL"];
+const controlesRuta11 = [
+  "PAMPAS",
+  "CT",
+  "PARAISO IDA",
+  "LOZA IDA",
+  "MANANTIAL",
+];
 
 const controlesRuta12 = [
   "LOZA VUELTA",
@@ -207,6 +213,12 @@ export default function Page() {
     setHasSearched(true);
     setSearchedRoute(selectedRoute);
 
+    // ⬇️ Usar selectedRoute directamente en lugar de currentControles
+    const controlesParaUsar =
+      selectedRoute === "11" ? controlesRuta11 : controlesRuta12;
+    const headersParaUsar =
+      selectedRoute === "11" ? headersRuta11 : headersRuta12;
+
     try {
       const url = `https://villa.velsat.pe:8443/api/Datero/controlEdu/${date}/${selectedRoute}/etudv22`;
       const response = await fetch(url);
@@ -225,11 +237,11 @@ export default function Page() {
         const base = [item.deviceid, item.hora_inicio, item.hora_registro];
 
         const controlMap: Record<string, string[]> = {};
-        currentControles.forEach((control) => {
+        // ⬇️ Usar controlesParaUsar en lugar de currentControles
+        controlesParaUsar.forEach((control) => {
           controlMap[control.toUpperCase()] = ["", "", ""];
         });
 
-        // Procesar todos los controles normalmente
         item.controles.forEach((c: Control) => {
           const nom = c.nom_control?.toUpperCase()?.trim();
           if (nom && controlMap[nom]) {
@@ -254,7 +266,8 @@ export default function Page() {
           }
         });
 
-        const controlValues = currentHeaders
+        // ⬇️ Usar headersParaUsar en lugar de currentHeaders
+        const controlValues = headersParaUsar
           .map((header, i) =>
             subdividedColumns.includes(i)
               ? controlMap[header.toUpperCase()]
