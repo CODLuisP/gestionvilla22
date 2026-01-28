@@ -3,7 +3,8 @@ import React, { useState } from "react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
-import { FileSpreadsheet, FileText, Search, X } from "lucide-react";
+import { FileSpreadsheet, FileText, Search, X, Loader2 } from "lucide-react";
+import DataOffLineGps from "./DataOffLineGps";
 
 const headersRuta11 = [
   "Unidad",
@@ -17,8 +18,6 @@ const headersRuta11 = [
   "Conductor",
   "Total",
 ];
-
-
 
 const headersRuta12 = [
   "Unidad",
@@ -67,6 +66,8 @@ interface Despacho {
 
 export default function Page() {
   const [selectedRoute, setSelectedRoute] = useState("11");
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const getTodayLocal = () => {
     const now = new Date();
@@ -80,14 +81,11 @@ export default function Page() {
   const [date, setDate] = useState(today);
 
   const [searchText, setSearchText] = useState("");
+  const [activeHeaders, setActiveHeaders] = useState(headersRuta11);
   const [rows, setRows] = useState<(string | string[])[][]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const subdividedColumns = [3, 4, 5, 6, 7];
-  const [searchedRoute, setSearchedRoute] = useState("11");
-
-  const currentHeaders = searchedRoute === "11" ? headersRuta11 : headersRuta12;
-  
+  const [subdividedColumns, setSubdividedColumns] = useState<number[]>([
+    3, 4, 5, 6, 7
+  ]);
 
   // Función para verificar si una fila tiene al menos una hora en los controles
   const hasControlTimes = (row: (string | string[])[]) => {
@@ -96,6 +94,7 @@ export default function Page() {
 
     return visibleData.some((cell, index) => {
       if (subdividedColumns.includes(index) && Array.isArray(cell)) {
+        // Verificar si hay hora estimada o hora de llegada
         return (
           (cell[0] && cell[0].trim() !== "") ||
           (cell[1] && cell[1].trim() !== "")
@@ -108,7 +107,7 @@ export default function Page() {
   const exportExcel = () => {
     const headerRow: string[] = [];
 
-    currentHeaders.forEach((header, index) => {
+    activeHeaders.forEach((header, index) => {
       if (subdividedColumns.includes(index)) {
         headerRow.push(`${header} - Estimada`);
         headerRow.push(`${header} - Llegada`);
@@ -133,6 +132,7 @@ export default function Page() {
       visibleData.forEach((cell, i) => {
         if (subdividedColumns.includes(i) && Array.isArray(cell)) {
           const voladoRaw = cell[2]?.trim() || "0";
+          // No sumar si es "+0" (que viene de valores "seg")
           if (voladoRaw !== "+0") {
             const volado = parseInt(voladoRaw);
             if (!isNaN(volado) && volado > 0) total += volado;
@@ -148,6 +148,7 @@ export default function Page() {
         }
       });
 
+      // Conductor
       if (typeof conductorCell === "string") {
         rowData.push(conductorCell);
       } else {
@@ -165,7 +166,7 @@ export default function Page() {
 
     const today = new Date();
     const formattedDate = `${String(today.getDate()).padStart(2, "0")}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${today.getFullYear()}`;
 
     XLSX.writeFile(workbook, `ControlDespacho_${formattedDate}.xlsx`);
@@ -201,7 +202,7 @@ export default function Page() {
     pdf.addImage(imgData, "PNG", 0, 20, pdfWidth, pdfHeight);
     const today = new Date();
     const formattedDate = `${String(today.getDate()).padStart(2, "0")}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${today.getFullYear()}`;
 
     pdf.save(`ControlDespacho_${formattedDate}.pdf`);
@@ -212,13 +213,19 @@ export default function Page() {
   const handleSearch = async () => {
     setIsLoading(true);
     setHasSearched(true);
-    setSearchedRoute(selectedRoute);
 
-    // ⬇️ Usar selectedRoute directamente en lugar de currentControles
-    const controlesParaUsar =
-      selectedRoute === "11" ? controlesRuta11 : controlesRuta12;
-    const headersParaUsar =
-      selectedRoute === "11" ? headersRuta11 : headersRuta12;
+    let headers = headersRuta11;
+    let controles = controlesRuta11;
+    let newSubdividedColumns = [3, 4, 5, 6, 7];
+
+    if (selectedRoute === "12") {
+      headers = headersRuta12;
+      controles = controlesRuta12;
+      newSubdividedColumns = [3, 4, 5, 6, 7];
+    }
+
+    setActiveHeaders(headers);
+    setSubdividedColumns(newSubdividedColumns);
 
     try {
       const url = `https://villa.velsat.pe:8443/api/Datero/controlEdu/${date}/${selectedRoute}/etudv22`;
@@ -238,8 +245,7 @@ export default function Page() {
         const base = [item.deviceid, item.hora_inicio, item.hora_registro];
 
         const controlMap: Record<string, string[]> = {};
-        // ⬇️ Usar controlesParaUsar en lugar de currentControles
-        controlesParaUsar.forEach((control) => {
+        controles.forEach((control) => {
           controlMap[control.toUpperCase()] = ["", "", ""];
         });
 
@@ -250,10 +256,13 @@ export default function Page() {
             if (c.volado) {
               const voladoStr = c.volado.trim();
               if (voladoStr.toLowerCase().includes("m")) {
+                // Si contiene "m" (como "5min"), procesar normalmente
                 voladoNumerico = voladoStr.match(/^[+-]?\d+/)?.[0] || "0";
               } else if (voladoStr.toLowerCase().endsWith("seg")) {
+                // Si NO contiene "m" pero termina en "seg", mostrar +0
                 voladoNumerico = "+0";
               } else {
+                // Otros casos, procesar normalmente
                 voladoNumerico = voladoStr.match(/^[+-]?\d+/)?.[0] || "0";
               }
             } else {
@@ -267,12 +276,24 @@ export default function Page() {
           }
         });
 
-        // ⬇️ Usar headersParaUsar en lugar de currentHeaders
-        const controlValues = headersParaUsar
+        // NUEVA LÓGICA: Llenar automáticamente LOZA IDA y MANANTIAL SIEMPRE
+      if (selectedRoute === "11") {
+        // LOZA IDA: Copiar estimada a llegada y poner +0 en volado
+        if (controlMap["LOZA IDA"][0] !== "") {
+          controlMap["LOZA IDA"][1] = controlMap["LOZA IDA"][0];
+          controlMap["LOZA IDA"][2] = "+0";
+        }
+
+        // MANANTIAL: Copiar estimada a llegada y poner +0 en volado
+        if (controlMap["MANANTIAL"][0] !== "") {
+          controlMap["MANANTIAL"][1] = controlMap["MANANTIAL"][0];
+          controlMap["MANANTIAL"][2] = "+0";
+        }
+      }
+
+        const controlValues = headers
           .map((header, i) =>
-            subdividedColumns.includes(i)
-              ? controlMap[header.toUpperCase()]
-              : null
+            newSubdividedColumns.includes(i) ? controlMap[header] : null,
           )
           .filter((v) => v !== null) as string[][];
 
@@ -288,11 +309,16 @@ export default function Page() {
     }
   };
 
+  const handleDataSent = () => {
+    console.log("Datos enviados exitosamente, actualizando tabla...");
+    handleSearch();
+  };
+
   const filteredRows = rows.filter((row) => {
     return row.some((cell, index) => {
       if (subdividedColumns.includes(index)) {
         return (cell as string[]).some((subcell) =>
-          subcell.toLowerCase().includes(searchText.toLowerCase())
+          subcell.toLowerCase().includes(searchText.toLowerCase()),
         );
       } else if (typeof cell === "string") {
         return cell.toLowerCase().includes(searchText.toLowerCase());
@@ -301,7 +327,10 @@ export default function Page() {
     });
   });
 
+  // Nueva variable para determinar si hay datos cargados
   const hasLoadedData = hasSearched && rows.length > 0;
+
+  // Variable para determinar si hay resultados de búsqueda
   const hasSearchResults = filteredRows.length > 0;
 
   return (
@@ -309,7 +338,7 @@ export default function Page() {
       {/* Cabecera */}
       <div className="border border-gray-800 p-4 sm:p-2">
         <h2 className="text-center text-blue-800 font-semibold text-lg mb-4 dark:text-gray-100">
-          Control de Despacho
+          Búsqueda de Despacho
         </h2>
 
         <div className="flex flex-col xl:flex-row gap-4 xl:gap-6 items-center justify-center">
@@ -317,12 +346,12 @@ export default function Page() {
           <div className="w-full max-w-md xl:max-w-none xl:w-auto">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 sm:w-28 xl:w-22 flex-shrink-0">
-                Ruta:
+                Seleccionar Ruta:
               </label>
               <select
+                className="w-full sm:min-w-[250px] xl:min-w-[230px] border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md dark:text-gray-300"
                 value={selectedRoute}
                 onChange={(e) => setSelectedRoute(e.target.value)}
-                className="w-full sm:min-w-[250px] xl:min-w-[230px] border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300"
                 disabled={isLoading}
               >
                 <option value="11">1483 - Chorrillos - VMT (A)</option>
@@ -330,11 +359,12 @@ export default function Page() {
               </select>
             </div>
           </div>
+
           {/* Fecha */}
           <div className="w-full max-w-md xl:max-w-none xl:w-auto">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 sm:w-28 xl:w-30 flex-shrink-0">
-                Fecha:
+                Fecha Búsqueda:
               </label>
               <input
                 type="date"
@@ -345,7 +375,8 @@ export default function Page() {
               />
             </div>
           </div>
-          {/* Botón Buscar */}
+
+          {/* Botón */}
           <div className="w-full max-w-md xl:max-w-none xl:w-auto flex justify-center xl:justify-start mt-2 xl:mt-0">
             <button
               onClick={handleSearch}
@@ -354,26 +385,7 @@ export default function Page() {
             >
               {isLoading ? (
                 <>
-                  <svg
-                    className="animate-spin h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8H4z"
-                    />
-                  </svg>
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   Cargando...
                 </>
               ) : (
@@ -384,14 +396,22 @@ export default function Page() {
               )}
             </button>
           </div>
+
+          <div className="w-full xl:w-auto flex justify-center items-center">
+            <DataOffLineGps
+              ruta={selectedRoute}
+              fecha={date}
+              onDataSent={handleDataSent}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Sección de búsqueda y botones */}
+      {/* Sección de búsqueda y botones - Solo mostrar si hay datos cargados */}
       {!isLoading && hasLoadedData && (
         <div className="space-y-2">
           <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-            {/* BUSCAR */}
+            {/* BUSCAR (izquierda) */}
             <div className="relative flex items-center w-[390px]">
               <Search className="absolute left-3 w-4 h-4 text-gray-400" />
               <input
@@ -411,7 +431,7 @@ export default function Page() {
               )}
             </div>
 
-            {/* BOTONES DESCARGA */}
+            {/* BOTONES DESCARGA (derecha) */}
             <div className="flex items-center gap-3">
               <button
                 onClick={exportExcel}
@@ -430,6 +450,7 @@ export default function Page() {
             </div>
           </div>
 
+          {/* Mensaje cuando no hay resultados de búsqueda pero sí hay datos */}
           {searchText && !hasSearchResults && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
               <p className="text-yellow-800">
@@ -446,12 +467,12 @@ export default function Page() {
         </div>
       )}
 
-      {/* Mensaje inicial */}
+      {/* Mensaje inicial - Solo mostrar si no se ha buscado */}
       {!isLoading && !hasSearched && (
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
           <div className="text-6xl text-gray-400">🔍</div>
           <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300">
-            Seleccione una fecha y presione Buscar
+            Seleccione una ruta, fecha y presione en Buscar
           </h3>
         </div>
       )}
@@ -459,33 +480,14 @@ export default function Page() {
       {/* Loading State */}
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
-          <svg
-            className="animate-spin h-8 w-8 text-blue-600"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8H4z"
-            />
-          </svg>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           <p className="text-gray-600 dark:text-gray-300">
             Cargando despachos...
           </p>
         </div>
       )}
 
-      {/* Mensaje sin datos */}
+      {/* Mensaje cuando no hay datos del API */}
       {!isLoading && hasSearched && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
           <div className="text-6xl text-gray-300">📋</div>
@@ -493,18 +495,19 @@ export default function Page() {
             No se encontraron despachos
           </h3>
           <p className="text-gray-500 dark:text-gray-400 text-center">
-            No hay despachos registrados para la fecha seleccionada.
+            No hay despachos registrados para la fecha y ruta seleccionada.
           </p>
         </div>
       )}
 
-      {/* Tabla */}
+      {/* Tabla - Solo mostrar si hay datos cargados */}
       {!isLoading && hasLoadedData && (
         <div id="tabla-pdf" className="overflow-x-auto">
           <table className="min-w-full border text-sm text-center border-collapse">
             <thead>
+              {/* CABECERAS */}
               <tr className="bg-slate-200">
-                {currentHeaders.map((header, index) => {
+                {activeHeaders.map((header, index) => {
                   if (subdividedColumns.includes(index)) {
                     return (
                       <th
@@ -535,13 +538,13 @@ export default function Page() {
                 const conductorIndex = row.length - 1;
                 const visibleData = row.slice(0, conductorIndex);
                 const conductor = row[conductorIndex];
-
                 const total = visibleData.reduce((acc, cell, index) => {
                   if (
                     subdividedColumns.includes(index) &&
                     Array.isArray(cell)
                   ) {
                     const raw = (cell[2] || "0").trim();
+                    // No sumar si es "+0" (que viene de valores "seg")
                     if (raw === "+0") return acc;
                     const value = parseInt(raw);
                     if (!isNaN(value) && value > 0) acc += value;
@@ -549,6 +552,7 @@ export default function Page() {
                   return acc;
                 }, 0);
 
+                // Verificar si esta fila tiene horas en los controles
                 const hasHours = hasControlTimes(row);
 
                 return (
@@ -557,15 +561,18 @@ export default function Page() {
                       <React.Fragment key={cellIndex}>
                         {subdividedColumns.includes(cellIndex) ? (
                           (cell as string[]).map((value, i) => {
+                            // Definir colores: grises si no hay horas, normales si las hay
                             let bgColor = "";
                             if (hasHours) {
+                              // Colores normales
                               bgColor =
                                 i === 0
-                                  ? "bg-[#fdecc1]"
+                                  ? "bg-[#fdecc1]" // Estimada
                                   : i === 1
-                                  ? "bg-[#cbfdc1]"
-                                  : "bg-[#c1fdeb]";
+                                    ? "bg-[#cbfdc1]" // Llegada
+                                    : "bg-[#c1fdeb]"; // Volado
                             } else {
+                              // Colores grises
                               bgColor = "bg-gray-200";
                             }
 
@@ -586,23 +593,14 @@ export default function Page() {
                       </React.Fragment>
                     ))}
 
+                    {/* Conductor */}
                     <td className="border border-gray-500 px-2 py-1 text-xs text-center dark:text-gray-300">
                       {conductor}
                     </td>
+                    {/* Total */}
                     <td className="border border-gray-500 px-2 py-1 text-xs text-center dark:text-gray-300">
                       {total > 0 ? `+${total}` : total < 0 ? total : "+0"}
                     </td>
-
-                    {/* ⬇️ NUEVA COLUMNA CON BOTÓN */}
-                    {/* <td className="border border-gray-500 px-2 py-1 text-xs text-center">
-                      <DataOffLineGps
-                        ruta={selectedRoute}
-                        fecha={date}
-                        onDataSent={handleDataSent}
-                        specificVehicle={deviceId as string} // ⬅️ Pasar la unidad específica
-                        buttonVariant="small" // ⬅️ Usar botón pequeño
-                      />
-                    </td> */}
                   </tr>
                 );
               })}
