@@ -703,10 +703,6 @@ export default function DataOffLineGps({
       });
 
       if (allDetections.length > 0) {
-        const [startHours, startMinutes] = vehicle.startTime
-          .split(":")
-          .map(Number);
-
         // DESPUÉS (con valores estáticos):
         const staticMinutes =
           selectedRoute === "11"
